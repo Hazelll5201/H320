@@ -241,6 +241,18 @@ export default function App() {
     }
   };
 
+  const handleDeleteHistory = async (historyId) => {
+    openConfirm('刪除歷史紀錄', '確定要刪除這筆結算紀錄嗎？刪除後將無法恢復。', async () => {
+      try {
+        await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'historyRecords', historyId));
+        setHistoryDetailItem(null);
+        showToast('歷史紀錄已刪除');
+      } catch (err) {
+        showToast('刪除失敗');
+      }
+    });
+  };
+
   const copyToClipboard = () => {
     const customer = customers.find(c => c.id === selectedCustomerId) || { name: "未命名" };
     let text = `【尚好中運動彩券行-顧客對帳單】\n`;
@@ -314,15 +326,16 @@ export default function App() {
 
         <div className="mx-auto max-w-md flex gap-2 items-center overflow-x-auto no-scrollbar pb-1">
           <div className="relative flex-1 min-w-[130px]">
+            {/* 修正選單圖案位置 */}
             <select 
-              className="w-full bg-slate-100 border-none rounded-xl text-sm font-bold p-2.5 focus:ring-2 focus:ring-blue-500 shadow-sm pr-8"
+              className="w-full bg-slate-100 border-none rounded-xl text-sm font-bold p-2.5 focus:ring-2 focus:ring-blue-500 shadow-sm pr-10 appearance-none"
               value={selectedCustomerId}
               onChange={(e) => setSelectedCustomerId(e.target.value)}
             >
               {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
-            <div className="absolute right-2 top-3 pointer-events-none text-slate-400">
-              <ChevronDown size={14} />
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
+              <ChevronDown size={18} />
             </div>
           </div>
           <div className="h-5 w-px bg-slate-200 mx-1"></div>
@@ -553,7 +566,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 歷史紀錄詳情 Modal (更新為統整顯示) */}
+      {/* 歷史紀錄詳情 Modal */}
       {historyDetailItem && historySummary && (
         <div className="fixed inset-0 z-[250] flex items-center justify-center p-6">
           <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-md" onClick={() => setHistoryDetailItem(null)}></div>
@@ -603,7 +616,17 @@ export default function App() {
               <span className="text-lg font-black tracking-tight uppercase">總計結餘</span>
               <span className="text-3xl font-black tracking-tighter leading-none">${Math.round(historyDetailItem.total).toLocaleString()}</span>
             </div>
-            <button onClick={() => setHistoryDetailItem(null)} className="w-full py-5 bg-slate-800 text-white font-black rounded-3xl mt-6 active:scale-95 transition-transform">關閉視窗</button>
+            
+            {/* 新增刪除此歷史紀錄按鈕 */}
+            <div className="mt-8 flex flex-col gap-3">
+              <button 
+                onClick={() => handleDeleteHistory(historyDetailItem.id)}
+                className="w-full py-4 border-2 border-red-100 text-red-500 font-bold rounded-2xl flex items-center justify-center gap-2 active:bg-red-50 transition-colors"
+              >
+                <Trash2 size={18} /> 刪除此歷史紀錄
+              </button>
+              <button onClick={() => setHistoryDetailItem(null)} className="w-full py-5 bg-slate-800 text-white font-black rounded-3xl active:scale-95 transition-transform">關閉視窗</button>
+            </div>
           </div>
         </div>
       )}
