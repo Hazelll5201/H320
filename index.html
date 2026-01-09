@@ -199,12 +199,29 @@
         } catch (e) { showToast('結帳失敗'); }
       };
 
-      const updateHistoryStatus = async (id, field, value) => {
-        try {
-          await db.doc(`${publicPath}/historyRecords/${id}`).update({ [field]: value });
-          setHistoryDetailItem(prev => ({ ...prev, [field]: value }));
-          showToast('狀態已更新');
-        } catch (e) { showToast('更新失敗'); }
+      // 改為還原資料邏輯
+      const handleModifyHistory = () => {
+        if (!historyDetailItem) return;
+        setModalConfig({
+          show: true,
+          title: '修改歷史紀錄',
+          message: '確定要修改此紀錄？這會將資料移回「當前帳務」並從歷史紀錄中刪除。',
+          onConfirm: async () => {
+            try {
+              const recordsToRestore = JSON.parse(historyDetailItem.records);
+              // 將資料還原至當前帳務 (不帶原來的ID，避免衝突)
+              for (const r of recordsToRestore) {
+                const { id, ...dataToRestore } = r;
+                await db.collection(`${publicPath}/currentRecords`).add(dataToRestore);
+              }
+              // 從歷史紀錄刪除
+              await db.doc(`${publicPath}/historyRecords/${historyDetailItem.id}`).delete();
+              setHistoryDetailItem(null);
+              setView('current');
+              showToast('資料已返回當前帳務');
+            } catch (e) { showToast('還原失敗'); }
+          }
+        });
       };
 
       const buildShareText = () => {
@@ -341,7 +358,6 @@
                     <div>
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{h.date}</p>
                       <p className="text-xs text-slate-500 font-bold flex items-center gap-1"><Icon name="file-text" size={12}/> 結帳人員: {h.settledBy || '已歸檔'}</p>
-                      {/* 歷史卡片狀態顯示 */}
                       <p className="text-[10px] text-slate-400 font-bold mt-1">
                         狀態：{h.isHandoverNotSettled ? '交班未結清' : (h.isAllSettled ? '全部已結清' : '無')}
                       </p>
@@ -437,36 +453,16 @@
             </div>
           )}
 
-          {/* 歷史紀錄詳情 Modal (新增修改狀態欄位) */}
+          {/* 歷史紀錄詳情 Modal (修改按鈕與邏輯) */}
           {historyDetailItem && historySummary && (
             <div className="fixed inset-0 z-[250] flex items-center justify-center p-6"><div className="absolute inset-0 bg-slate-900/70 backdrop-blur-md" onClick={() => setHistoryDetailItem(null)}></div><div className="relative w-full max-md bg-white rounded-[3rem] p-8 shadow-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in no-scrollbar"><div className="flex justify-between items-center mb-6"><h3 className="text-xl font-black text-slate-800 tracking-tighter">歷史結算統整</h3><button onClick={() => setHistoryDetailItem(null)} className="p-2 bg-slate-100 rounded-full flex items-center justify-center"><Icon name="x" /></button></div><div className="bg-slate-50 p-5 rounded-3xl mb-8 border border-slate-100 space-y-2 text-xs font-bold text-slate-500">
               <div className="flex justify-between"><span>對帳日期</span><span className="text-slate-800">{historyDetailItem.date}</span></div>
               <div className="flex justify-between"><span>結帳人員</span><span className="text-blue-600 font-black">{historyDetailItem.settledBy || '系統自動'}</span></div>
               <div className="flex justify-between"><span>結帳時間</span><span className="text-slate-800">{new Date(historyDetailItem.settledAt).toLocaleTimeString()}</span></div>
               
-              {/* 顯示修改此歷史紀錄欄位區區塊 */}
-              <div className="mt-4 pt-4 border-t border-slate-200">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">修改此歷史紀錄（僅限狀態）</p>
-                <div className="flex flex-col gap-3">
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      checked={!!historyDetailItem.isHandoverNotSettled} 
-                      onChange={(e) => updateHistoryStatus(historyDetailItem.id, 'isHandoverNotSettled', e.target.checked)}
-                      className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" 
-                    />
-                    <span className="text-slate-700 font-bold text-xs">交班未結清</span>
-                  </label>
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      checked={!!historyDetailItem.isAllSettled} 
-                      onChange={(e) => updateHistoryStatus(historyDetailItem.id, 'isAllSettled', e.target.checked)}
-                      className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" 
-                    />
-                    <span className="text-slate-700 font-bold text-xs">全部已結清</span>
-                  </label>
-                </div>
+              <div className="flex gap-2 pt-1">
+                {historyDetailItem.isHandoverNotSettled && <span className="bg-orange-100 text-orange-600 px-2 py-0.5 rounded text-[10px]">交班未結清</span>}
+                {historyDetailItem.isAllSettled && <span className="bg-green-100 text-green-600 px-2 py-0.5 rounded text-[10px]">全部已結清</span>}
               </div>
             </div>
             <div className="space-y-4 mb-8 px-2">
@@ -480,10 +476,26 @@
               )}
               <div className="h-px bg-slate-100 my-4"></div>
             </div><div className="bg-blue-600 p-8 rounded-[2.5rem] flex justify-between items-center text-white shadow-xl shadow-blue-100"><span className="text-lg font-black uppercase">總計結餘</span><span className="text-3xl font-black tracking-tighter leading-none">${Math.round(historyDetailItem.total || 0).toLocaleString()}</span></div>
-            <div className="mt-8 flex flex-col gap-3"><button onClick={() => { setModalConfig({ show: true, title: '刪除紀錄', message: '確定刪除這筆歷史紀錄嗎？刪除後無法恢復。', onConfirm: () => { db.doc(`${publicPath}/historyRecords/${historyDetailItem.id}`).delete(); setHistoryDetailItem(null); showToast('紀錄已移除'); } }); }} className="w-full py-4 border-2 border-red-50 text-red-500 font-bold rounded-2xl flex items-center justify-center gap-2 active:bg-red-50 transition-colors"><Icon name="trash-2" size={18} /> 刪除此歷史紀錄</button><button onClick={() => setHistoryDetailItem(null)} className="w-full py-5 bg-slate-800 text-white font-black rounded-3xl active:scale-95 transition-all">關閉明細</button></div></div></div>
+            
+            {/* 修改與刪除按鈕區區塊 */}
+            <div className="mt-8 flex flex-col gap-3">
+              <button 
+                onClick={handleModifyHistory}
+                className="w-full py-4 border-2 border-blue-50 text-blue-600 font-bold rounded-2xl flex items-center justify-center gap-2 active:bg-blue-50 transition-colors"
+              >
+                <Icon name="edit-3" size={18} /> 修改此歷史紀錄
+              </button>
+              <button 
+                onClick={() => { setModalConfig({ show: true, title: '刪除紀錄', message: '確定刪除這筆歷史紀錄嗎？刪除後無法恢復。', onConfirm: () => { db.doc(`${publicPath}/historyRecords/${historyDetailItem.id}`).delete(); setHistoryDetailItem(null); showToast('紀錄已移除'); } }); }} 
+                className="w-full py-4 border-2 border-red-50 text-red-500 font-bold rounded-2xl flex items-center justify-center gap-2 active:bg-red-50 transition-colors"
+              >
+                <Icon name="trash-2" size={18} /> 刪除此歷史紀錄
+              </button>
+              <button onClick={() => setHistoryDetailItem(null)} className="w-full py-5 bg-slate-800 text-white font-black rounded-3xl active:scale-95 transition-all">關閉明細</button>
+            </div></div></div>
           )}
 
-          {/* Alert Modal */}
+          {/* 確認視窗 */}
           {modalConfig.show && (
             <div className="fixed inset-0 z-[300] flex items-center justify-center p-6"><div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setModalConfig({ ...modalConfig, show: false })}></div><div className="relative w-full max-w-sm bg-white rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in"><div className="flex items-center gap-3 text-red-500 mb-4"><Icon name="alert-circle" size={28} /><h3 className="text-xl font-black">{modalConfig.title}</h3></div><p className="text-slate-600 font-bold mb-8 leading-relaxed text-sm">{modalConfig.message}</p><div className="flex gap-3"><button onClick={() => setModalConfig({ ...modalConfig, show: false })} className="flex-1 py-4 bg-slate-100 text-slate-400 font-black rounded-2xl active:scale-95 transition-transform">取消</button><button onClick={() => { modalConfig.onConfirm(); setModalConfig({ ...modalConfig, show: false }); }} className="flex-1 py-4 bg-blue-600 text-white font-black rounded-2xl shadow-lg active:scale-95 transition-transform">確定</button></div></div></div>
           )}
