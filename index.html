@@ -32,7 +32,7 @@
   <script type="text/babel">
     const { useState, useEffect, useMemo } = React;
 
-    // --- 您的 Firebase 金鑰配置 ---
+    // --- 您的 Firebase 金鑰配置 (維持不變) ---
     const firebaseConfig = {
       apiKey: "AIzaSyASRHQ9_sQouh09cRwYTOe7ktc2CNdhXyQ",
       authDomain: "h320-6cea5.firebaseapp.com",
@@ -50,7 +50,7 @@
     const db = firebase.firestore();
     const appId = "shang-hao-zhong-v5";
 
-    // 模擬 Lucide 圖標組件
+    // 統一圖標組件，避免 ReferenceError
     const Icon = ({ name, size = 20, className = "" }) => {
       useEffect(() => { if (window.lucide) window.lucide.createIcons(); });
       return <i data-lucide={name} style={{ width: size, height: size }} className={`flex items-center justify-center ${className}`}></i>;
@@ -73,7 +73,10 @@
       const [modalConfig, setModalConfig] = useState({ show: false, title: '', message: '', onConfirm: null });
       const [toast, setToast] = useState({ show: false, message: '' });
 
-      // 1. 匿名驗證
+      // 雲端路徑定義：改為公共共享路徑以實現不限設備同步
+      const publicPath = `artifacts/${appId}/public/data`;
+
+      // 1. 匿名驗證 (Rule 3: Auth Before Queries)
       useEffect(() => {
         const unsubAuth = auth.onAuthStateChanged(u => {
           if (u) { setUser(u); } else { auth.signInAnonymously(); }
@@ -81,22 +84,22 @@
         return () => unsubAuth();
       }, []);
 
-      // 2. 即時資料同步
+      // 2. 即時資料同步 (Rule 1 & 2)
       useEffect(() => {
         if (!user) return;
-        const rootPath = `artifacts/${appId}/users/${user.uid}`;
         
-        const unsubCust = db.collection(`${rootPath}/customers`).onSnapshot(snap => {
+        // 監聽公共區域的資料
+        const unsubCust = db.collection(`${publicPath}/customers`).onSnapshot(snap => {
           const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
           setCustomers(list);
           if (list.length > 0 && !selectedCustomerId) setSelectedCustomerId(list[0].id);
         });
 
-        const unsubCurrent = db.collection(`${rootPath}/currentRecords`).onSnapshot(snap => {
+        const unsubCurrent = db.collection(`${publicPath}/currentRecords`).onSnapshot(snap => {
           setAllCurrentRecords(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
 
-        const unsubHistory = db.collection(`${rootPath}/historyRecords`).onSnapshot(snap => {
+        const unsubHistory = db.collection(`${publicPath}/historyRecords`).onSnapshot(snap => {
           setAllHistoryRecords(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
 
@@ -165,7 +168,7 @@
         const min = String(now.getMinutes()).padStart(2, '0');
         const currentDateTimeStr = `${yyyy}-${mm}-${dd}T${hh}:${min}`;
 
-        await db.collection(`artifacts/${appId}/users/${user.uid}/currentRecords`).add({
+        await db.collection(`${publicPath}/currentRecords`).add({
           customerId: selectedCustomerId, 
           timestamp: Date.now(), 
           datetime: currentDateTimeStr, 
@@ -180,15 +183,14 @@
 
       const confirmSettle = async () => {
         if (!cashierName.trim()) { showToast('請填寫結帳人員'); return; }
-        const rootPath = `artifacts/${appId}/users/${user.uid}`;
         try {
-          await db.collection(`${rootPath}/historyRecords`).add({
+          await db.collection(`${publicPath}/historyRecords`).add({
             customerId: selectedCustomerId, settledAt: Date.now(), settledBy: cashierName,
             date: new Date().toLocaleDateString(), records: JSON.stringify(chainedRecords), total: finalTotal
           });
-          for (const r of currentRecords) { await db.doc(`${rootPath}/currentRecords/${r.id}`).delete(); }
+          for (const r of currentRecords) { await db.doc(`${publicPath}/currentRecords/${r.id}`).delete(); }
           setIsSettleModalOpen(false); setIsSheetOpen(false); setCashierName('');
-          showToast('結帳完成，已儲存至歷史紀錄！');
+          showToast('結帳完成，已儲存至雲端歷史紀錄！');
         } catch (e) { showToast('結帳失敗'); }
       };
 
@@ -215,7 +217,7 @@
         return text;
       };
 
-      if (!user) return <div className="h-screen flex items-center justify-center bg-slate-50 text-slate-400 font-black tracking-widest">系統連線中...</div>;
+      if (!user) return <div className="h-screen flex items-center justify-center bg-slate-50 text-slate-400 font-black tracking-widest">雲端同步中...</div>;
 
       return (
         <div className="min-h-screen bg-slate-50 pb-48 font-sans text-slate-900 antialiased">
@@ -249,13 +251,13 @@
             {isSettingsOpen && (
               <div className="bg-white p-6 rounded-3xl shadow-xl border border-slate-100 animate-in fade-in duration-300">
                 <div className="flex justify-between items-center mb-4"><h3 className="text-sm font-black text-slate-700">管理顧客清單</h3><button onClick={() => setIsSettingsOpen(false)} className="text-slate-300"><Icon name="x" size={16}/></button></div>
-                <form onSubmit={async (e) => { e.preventDefault(); const n = document.getElementById('nName').value; const r = document.getElementById('nRebate').value; if(!n) return; await db.collection(`artifacts/${appId}/users/${user.uid}/customers`).add({ name: n, defaultRebate: parseFloat(r)||0, createdAt: Date.now() }); document.getElementById('nName').value=''; document.getElementById('nRebate').value=''; setIsSettingsOpen(false); showToast('顧客已新增'); }} className="space-y-4">
+                <form onSubmit={async (e) => { e.preventDefault(); const n = document.getElementById('nName').value; const r = document.getElementById('nRebate').value; if(!n) return; await db.collection(`${publicPath}/customers`).add({ name: n, defaultRebate: parseFloat(r)||0, createdAt: Date.now() }); document.getElementById('nName').value=''; document.getElementById('nRebate').value=''; setIsSettingsOpen(false); showToast('顧客已新增'); }} className="space-y-4">
                   <div className="grid grid-cols-2 gap-3"><input id="nName" type="text" placeholder="顧客姓名" className="bg-slate-50 border-none p-3.5 rounded-xl text-sm ring-1 ring-slate-100 focus:ring-2 focus:ring-blue-500" required /><input id="nRebate" type="number" step="0.01" placeholder="點數%" className="bg-slate-50 border-none p-3.5 rounded-xl text-sm ring-1 ring-slate-100 focus:ring-2 focus:ring-blue-500" /></div>
                   <button type="submit" className="w-full bg-blue-600 text-white py-3.5 rounded-2xl text-sm font-black shadow-lg">確認新增顧客</button>
                 </form>
                 <div className="mt-6 border-t pt-4 space-y-2 max-h-48 overflow-y-auto no-scrollbar">
                   {customers.map(c => (
-                    <div key={c.id} className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100"><span className="text-xs font-bold text-slate-700">{c.name} ({c.defaultRebate}%)</span><button onClick={() => { setModalConfig({ show: true, title: '刪除顧客', message: `確定刪除「${c.name}」？這會一併刪除該顧客的歷史紀錄。`, onConfirm: () => db.doc(`artifacts/${appId}/users/${user.uid}/customers/${c.id}`).delete() }); }} className="text-slate-300 hover:text-red-500 p-1"><Icon name="trash-2" size={14}/></button></div>
+                    <div key={c.id} className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100"><span className="text-xs font-bold text-slate-700">{c.name} ({c.defaultRebate}%)</span><button onClick={() => { setModalConfig({ show: true, title: '刪除顧客', message: `確定刪除「${c.name}」？這會一併刪除該顧客的歷史紀錄。`, onConfirm: () => db.doc(`${publicPath}/customers/${c.id}`).delete() }); }} className="text-slate-300 hover:text-red-500 p-1"><Icon name="trash-2" size={14}/></button></div>
                   ))}
                 </div>
               </div>
@@ -273,11 +275,11 @@
                           <input 
                             type="datetime-local" 
                             value={r.datetime} 
-                            onChange={(e) => db.doc(`artifacts/${appId}/users/${user.uid}/currentRecords/${r.id}`).update({ datetime: e.target.value })} 
+                            onChange={(e) => db.doc(`${publicPath}/currentRecords/${r.id}`).update({ datetime: e.target.value })} 
                             className="bg-slate-100 border-none rounded-lg p-1.5 text-[10px] font-bold text-slate-600 focus:ring-0 w-44" 
                           />
                         </div>
-                        <button onClick={() => setModalConfig({ show: true, title: '刪除項目', message: '確定刪除此帳務項目嗎？', onConfirm: () => db.doc(`artifacts/${appId}/users/${user.uid}/currentRecords/${r.id}`).delete() })} className="text-slate-200 hover:text-red-400 p-1 flex items-center justify-center"><Icon name="trash-2" size={18} /></button>
+                        <button onClick={() => setModalConfig({ show: true, title: '刪除項目', message: '確定刪除此帳務項目嗎？', onConfirm: () => db.doc(`${publicPath}/currentRecords/${r.id}`).delete() })} className="text-slate-200 hover:text-red-400 p-1 flex items-center justify-center"><Icon name="trash-2" size={18} /></button>
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
@@ -286,23 +288,23 @@
                           <span>原餘額</span>
                           {i > 0 && <span className="text-blue-500 font-bold tracking-normal text-[10px]">自動連動項目 #{i}</span>}
                         </label>
-                        <input type="number" value={r.prevBalance} readOnly={i > 0} onFocus={(e) => e.target.select()} onChange={(e) => db.doc(`artifacts/${appId}/users/${user.uid}/currentRecords/${r.id}`).update({ prevBalance: parseFloat(e.target.value)||0 })} className={`w-full text-xl font-black p-4 rounded-2xl border-none ring-1 ring-slate-100 ${i > 0 ? 'bg-slate-50 text-slate-400' : 'bg-white text-slate-900 shadow-inner'}`} />
+                        <input type="number" value={r.prevBalance} readOnly={i > 0} onFocus={(e) => e.target.select()} onChange={(e) => db.doc(`${publicPath}/currentRecords/${r.id}`).update({ prevBalance: parseFloat(e.target.value)||0 })} className={`w-full text-xl font-black p-4 rounded-2xl border-none ring-1 ring-slate-100 ${i > 0 ? 'bg-slate-50 text-slate-400' : 'bg-white text-slate-900 shadow-inner'}`} />
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-[16px] font-black text-blue-600 uppercase tracking-widest">今日轉存 (+)</label>
-                        <input type="number" defaultValue={r.deposit} onFocus={(e) => e.target.select()} onBlur={(e) => db.doc(`artifacts/${appId}/users/${user.uid}/currentRecords/${r.id}`).update({ deposit: parseFloat(e.target.value)||0 })} className="w-full text-xl font-black p-4 rounded-2xl border-none ring-1 ring-blue-50 bg-blue-50/30 text-blue-700 shadow-sm" />
+                        <input type="number" defaultValue={r.deposit} onFocus={(e) => e.target.select()} onBlur={(e) => db.doc(`${publicPath}/currentRecords/${r.id}`).update({ deposit: parseFloat(e.target.value)||0 })} className="w-full text-xl font-black p-4 rounded-2xl border-none ring-1 ring-blue-50 bg-blue-50/30 text-blue-700 shadow-sm" />
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-[16px] font-black text-red-500 uppercase tracking-widest">投注金額 (-)</label>
-                        <input type="number" defaultValue={r.bet} onFocus={(e) => e.target.select()} onBlur={(e) => db.doc(`artifacts/${appId}/users/${user.uid}/currentRecords/${r.id}`).update({ bet: parseFloat(e.target.value)||0 })} className="w-full text-xl font-black p-4 rounded-2xl border-none ring-1 ring-red-50 bg-red-50/30 text-red-600 shadow-sm" />
+                        <input type="number" defaultValue={r.bet} onFocus={(e) => e.target.select()} onBlur={(e) => db.doc(`${publicPath}/currentRecords/${r.id}`).update({ bet: parseFloat(e.target.value)||0 })} className="w-full text-xl font-black p-4 rounded-2xl border-none ring-1 ring-red-50 bg-red-50/30 text-red-600 shadow-sm" />
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-[16px] font-black text-emerald-600 uppercase tracking-widest">兌獎金額 (+)</label>
-                        <input type="number" defaultValue={r.prize} onFocus={(e) => e.target.select()} onBlur={(e) => db.doc(`artifacts/${appId}/users/${user.uid}/currentRecords/${r.id}`).update({ prize: parseFloat(e.target.value)||0 })} className="w-full text-xl font-black p-4 rounded-2xl border-none ring-1 ring-emerald-50 bg-emerald-50/30 text-emerald-700 shadow-sm" />
+                        <input type="number" defaultValue={r.prize} onFocus={(e) => e.target.select()} onBlur={(e) => db.doc(`${publicPath}/currentRecords/${r.id}`).update({ prize: parseFloat(e.target.value)||0 })} className="w-full text-xl font-black p-4 rounded-2xl border-none ring-1 ring-emerald-50 bg-emerald-50/30 text-emerald-700 shadow-sm" />
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-[16px] font-black text-purple-600 uppercase tracking-widest">回饋點數 %</label>
-                        <input type="number" defaultValue={r.rebatePercent} onFocus={(e) => e.target.select()} onBlur={(e) => db.doc(`artifacts/${appId}/users/${user.uid}/currentRecords/${r.id}`).update({ rebatePercent: parseFloat(e.target.value)||0 })} className="w-full text-xl font-black p-4 rounded-2xl border-none ring-1 ring-purple-50 bg-purple-50/30 text-purple-700 shadow-sm" />
+                        <input type="number" defaultValue={r.rebatePercent} onFocus={(e) => e.target.select()} onBlur={(e) => db.doc(`${publicPath}/currentRecords/${r.id}`).update({ rebatePercent: parseFloat(e.target.value)||0 })} className="w-full text-xl font-black p-4 rounded-2xl border-none ring-1 ring-purple-50 bg-purple-50/30 text-purple-700 shadow-sm" />
                       </div>
                       <div className="space-y-1.5 col-span-2">
                         <label className="text-[16px] font-black text-purple-400 uppercase tracking-widest">回饋點數 $ (自動)</label>
@@ -310,7 +312,7 @@
                       </div>
                       <div className="space-y-1.5 col-span-2">
                         <label className="text-[16px] font-black text-slate-400 uppercase tracking-widest">調整 (±)</label>
-                        <input type="number" defaultValue={r.adjustment} onFocus={(e) => e.target.select()} onBlur={(e) => db.doc(`artifacts/${appId}/users/${user.uid}/currentRecords/${r.id}`).update({ adjustment: parseFloat(e.target.value)||0 })} className="w-full text-xl font-black p-4 rounded-2xl border-none ring-1 ring-slate-100 bg-slate-50 text-slate-700 outline-none shadow-sm" />
+                        <input type="number" defaultValue={r.adjustment} onFocus={(e) => e.target.select()} onBlur={(e) => db.doc(`${publicPath}/currentRecords/${r.id}`).update({ adjustment: parseFloat(e.target.value)||0 })} className="w-full text-xl font-black p-4 rounded-2xl border-none ring-1 ring-slate-100 bg-slate-50 text-slate-700 outline-none shadow-sm" />
                       </div>
                     </div>
                     <div className="pt-5 border-t border-slate-50 flex justify-between items-center"><div className="flex flex-col"><span className="text-[16px] font-black text-slate-400 uppercase tracking-widest">本項合計小計</span><span className="text-3xl font-black tracking-tighter text-slate-900">$ {Math.round(calculateItemTotal(r)).toLocaleString()}</span></div><div className="p-3 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center shadow-inner"><Icon name="calculator" size={24} /></div></div>
@@ -325,7 +327,7 @@
                   <div key={h.id} onClick={() => setHistoryDetailItem(h)} className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex justify-between items-center active:scale-95 transition-transform cursor-pointer group">
                     <div>
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{h.date}</p>
-                      <p className="text-xs text-slate-500 font-bold flex items-center gap-1"><Icon name="file-text" size={12}/> {h.settledBy ? `結帳人員: ${h.settledBy}` : '已歸檔'}</p>
+                      <p className="text-xs text-slate-500 font-bold flex items-center gap-1"><Icon name="file-text" size={12}/> 結帳人員: {h.settledBy || '已歸檔'}</p>
                     </div>
                     <div className="text-right"><p className="text-2xl font-black text-blue-700 tracking-tighter mb-1">$ {Math.round(parseFloat(h.total) || 0).toLocaleString()}</p><p className="text-[10px] font-bold text-slate-300 uppercase">{new Date(h.settledAt).toLocaleTimeString()}</p></div>
                   </div>
@@ -348,7 +350,7 @@
             </div>
           </div>
 
-          {/* 電子帳單 Bottom Sheet (明細) */}
+          {/* 電子帳單 Bottom Sheet */}
           {isSheetOpen && (
             <div className="fixed inset-0 z-[100] flex items-end">
               <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in" onClick={() => setIsSheetOpen(false)}></div>
@@ -385,12 +387,12 @@
             </div>
           )}
 
-          {/* Settle Modal (結帳人員必填) */}
+          {/* 結帳人員必填 Modal */}
           {isSettleModalOpen && (
             <div className="fixed inset-0 z-[300] flex items-center justify-center p-6"><div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setIsSettleModalOpen(false)}></div><div className="relative w-full max-w-sm bg-white rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in"><div className="flex items-center gap-3 text-blue-600 mb-4"><Icon name="user-check" size={28} /><h3 className="text-xl font-black">結帳歸檔確認</h3></div><p className="text-slate-500 font-bold mb-6 text-sm">請輸入結帳人員姓名 (必填)：</p><input type="text" value={cashierName} onChange={(e) => setCashierName(e.target.value)} placeholder="例如：阿中" className="w-full bg-slate-50 border-none p-4 rounded-2xl text-lg font-bold ring-1 ring-slate-200 focus:ring-2 focus:ring-blue-500 mb-8 outline-none shadow-inner" autoFocus /><div className="flex gap-3"><button onClick={() => setIsSettleModalOpen(false)} className="flex-1 py-4 bg-slate-100 text-slate-400 font-black rounded-2xl active:scale-95">取消</button><button onClick={confirmSettle} className="flex-1 py-4 bg-blue-600 text-white font-black rounded-2xl shadow-lg active:scale-95">確定結帳</button></div></div></div>
           )}
 
-          {/* History Details Modal */}
+          {/* 歷史紀錄詳情 Modal */}
           {historyDetailItem && historySummary && (
             <div className="fixed inset-0 z-[250] flex items-center justify-center p-6"><div className="absolute inset-0 bg-slate-900/70 backdrop-blur-md" onClick={() => setHistoryDetailItem(null)}></div><div className="relative w-full max-md bg-white rounded-[3rem] p-8 shadow-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in no-scrollbar"><div className="flex justify-between items-center mb-6"><h3 className="text-xl font-black text-slate-800 tracking-tighter">歷史結算統整</h3><button onClick={() => setHistoryDetailItem(null)} className="p-2 bg-slate-100 rounded-full flex items-center justify-center"><Icon name="x" /></button></div><div className="bg-slate-50 p-5 rounded-3xl mb-8 border border-slate-100 space-y-2 text-xs font-bold text-slate-500">
               <div className="flex justify-between"><span>對帳日期</span><span className="text-slate-800">{historyDetailItem.date}</span></div>
@@ -408,10 +410,10 @@
               )}
               <div className="h-px bg-slate-100 my-4"></div>
             </div><div className="bg-blue-600 p-8 rounded-[2.5rem] flex justify-between items-center text-white shadow-xl shadow-blue-100"><span className="text-lg font-black uppercase">總計結餘</span><span className="text-3xl font-black tracking-tighter leading-none">${Math.round(historyDetailItem.total || 0).toLocaleString()}</span></div>
-            <div className="mt-8 flex flex-col gap-3"><button onClick={() => { setModalConfig({ show: true, title: '刪除紀錄', message: '確定刪除這筆歷史紀錄嗎？刪除後無法恢復。', onConfirm: () => { db.doc(`artifacts/${appId}/users/${user.uid}/historyRecords/${historyDetailItem.id}`).delete(); setHistoryDetailItem(null); showToast('紀錄已移除'); } }); }} className="w-full py-4 border-2 border-red-50 text-red-500 font-bold rounded-2xl flex items-center justify-center gap-2 active:bg-red-50 transition-colors"><Icon name="trash-2" size={18} /> 刪除此歷史紀錄</button><button onClick={() => setHistoryDetailItem(null)} className="w-full py-5 bg-slate-800 text-white font-black rounded-3xl active:scale-95 transition-all">關閉明細</button></div></div></div>
+            <div className="mt-8 flex flex-col gap-3"><button onClick={() => { setModalConfig({ show: true, title: '刪除紀錄', message: '確定刪除這筆歷史紀錄嗎？刪除後無法恢復。', onConfirm: () => { db.doc(`${publicPath}/historyRecords/${historyDetailItem.id}`).delete(); setHistoryDetailItem(null); showToast('紀錄已移除'); } }); }} className="w-full py-4 border-2 border-red-50 text-red-500 font-bold rounded-2xl flex items-center justify-center gap-2 active:bg-red-50 transition-colors"><Icon name="trash-2" size={18} /> 刪除此歷史紀錄</button><button onClick={() => setHistoryDetailItem(null)} className="w-full py-5 bg-slate-800 text-white font-black rounded-3xl active:scale-95 transition-all">關閉明細</button></div></div></div>
           )}
 
-          {/* Alert Modal */}
+          {/* 確認 Modal */}
           {modalConfig.show && (
             <div className="fixed inset-0 z-[300] flex items-center justify-center p-6"><div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setModalConfig({ ...modalConfig, show: false })}></div><div className="relative w-full max-w-sm bg-white rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in"><div className="flex items-center gap-3 text-red-500 mb-4"><Icon name="alert-circle" size={28} /><h3 className="text-xl font-black">{modalConfig.title}</h3></div><p className="text-slate-600 font-bold mb-8 leading-relaxed text-sm">{modalConfig.message}</p><div className="flex gap-3"><button onClick={() => setModalConfig({ ...modalConfig, show: false })} className="flex-1 py-4 bg-slate-100 text-slate-400 font-black rounded-2xl active:scale-95 transition-transform">取消</button><button onClick={() => { modalConfig.onConfirm(); setModalConfig({ ...modalConfig, show: false }); }} className="flex-1 py-4 bg-blue-600 text-white font-black rounded-2xl shadow-lg active:scale-95 transition-transform">確定</button></div></div></div>
           )}
