@@ -359,7 +359,7 @@
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{h.date}</p>
                       <p className="text-xs text-slate-500 font-bold flex items-center gap-1"><Icon name="file-text" size={12}/> 結帳人員: {h.settledBy || '已歸檔'}</p>
                       <p className="text-[10px] text-slate-400 font-bold mt-1">
-                        狀態：{h.isHandoverNotSettled ? '交班未結清' : (h.isAllSettled ? '全部已結清' : '無')}
+                        狀態：{h.isHandoverNotSettled ? '下班未結清' : (h.isAllSettled ? '全部已結清' : '無')}
                       </p>
                     </div>
                     <div className="text-right"><p className="text-2xl font-black text-blue-700 tracking-tighter mb-1">$ {Math.round(parseFloat(h.total) || 0).toLocaleString()}</p><p className="text-[10px] font-bold text-slate-300 uppercase">{new Date(h.settledAt).toLocaleTimeString()}</p></div>
@@ -436,7 +436,7 @@
                   <div className="flex flex-col gap-3 pt-2">
                     <label className="flex items-center gap-3 cursor-pointer group">
                       <input type="checkbox" checked={isHandoverNotSettled} onChange={e => setIsHandoverNotSettled(e.target.checked)} className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
-                      <span className="text-slate-700 font-bold text-sm group-active:scale-95 transition-transform">交班未結清</span>
+                      <span className="text-slate-700 font-bold text-sm group-active:scale-95 transition-transform">下班未結清</span>
                     </label>
                     <label className="flex items-center gap-3 cursor-pointer group">
                       <input type="checkbox" checked={isAllSettled} onChange={e => setIsAllSettled(e.target.checked)} className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
@@ -461,7 +461,7 @@
               <div className="flex justify-between"><span>結帳時間</span><span className="text-slate-800">{new Date(historyDetailItem.settledAt).toLocaleTimeString()}</span></div>
               
               <div className="flex gap-2 pt-1">
-                {historyDetailItem.isHandoverNotSettled && <span className="bg-orange-100 text-orange-600 px-2 py-0.5 rounded text-[10px]">交班未結清</span>}
+                {historyDetailItem.isHandoverNotSettled && <span className="bg-orange-100 text-orange-600 px-2 py-0.5 rounded text-[10px]">下班未結清</span>}
                 {historyDetailItem.isAllSettled && <span className="bg-green-100 text-green-600 px-2 py-0.5 rounded text-[10px]">全部已結清</span>}
               </div>
             </div>
