@@ -48,6 +48,7 @@
     }
     const auth = firebase.auth();
     const db = firebase.firestore();
+    // 依據您的要求將 appId 修改為 shang-hao-zhong
     const appId = "shang-hao-zhong";
 
     // 統一圖標組件
@@ -162,19 +163,14 @@
         
         let initialPrevBalance = 0;
         
-        // 判斷是否為第一筆帳務項目卡片
         if (chainedRecords.length > 0) {
-            // 若非第一筆，繼承上一筆卡片的合計
             initialPrevBalance = calculateItemTotal(chainedRecords[chainedRecords.length - 1]);
         } else {
-            // 若為第一筆，檢查歷史紀錄狀態
             if (historyRecords.length > 0) {
                 const latestHistory = historyRecords[0];
                 if (latestHistory.isHandoverNotSettled) {
-                    // 下班未結清：代入最新歷史結餘
                     initialPrevBalance = latestHistory.total || 0;
                 } else if (latestHistory.isAllSettled) {
-                    // 全部已結清：設為 0
                     initialPrevBalance = 0;
                 }
             }
@@ -298,7 +294,7 @@
               <div className="bg-white p-6 rounded-3xl shadow-xl border border-slate-100 animate-in fade-in duration-300">
                 <div className="flex justify-between items-center mb-4"><h3 className="text-sm font-black text-slate-700">管理顧客清單</h3><button onClick={() => setIsSettingsOpen(false)} className="text-slate-300"><Icon name="x" size={16}/></button></div>
                 <form onSubmit={async (e) => { e.preventDefault(); const n = document.getElementById('nName').value; const r = document.getElementById('nRebate').value; if(!n) return; await db.collection(`${publicPath}/customers`).add({ name: n, defaultRebate: parseFloat(r)||0, createdAt: Date.now() }); document.getElementById('nName').value=''; document.getElementById('nRebate').value=''; setIsSettingsOpen(false); showToast('顧客已新增'); }} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3"><input id="nName" type="text" placeholder="顧客姓名" className="bg-slate-50 border-none p-3.5 rounded-xl text-sm ring-1 ring-slate-100 focus:ring-2 focus:ring-blue-500" required /><input id="nRebate" type="number" step="0.01" placeholder="回饋%" className="bg-slate-50 border-none p-3.5 rounded-xl text-sm ring-1 ring-slate-100 focus:ring-2 focus:ring-blue-500" /></div>
+                  <div className="grid grid-cols-2 gap-3"><input id="nName" type="text" placeholder="顧客姓名" className="bg-slate-50 border-none p-3.5 rounded-xl text-sm ring-1 ring-slate-100 focus:ring-2 focus:ring-blue-500" required /><input id="nRebate" type="number" step="0.01" placeholder="點數%" className="bg-slate-50 border-none p-3.5 rounded-xl text-sm ring-1 ring-slate-100 focus:ring-2 focus:ring-blue-500" /></div>
                   <button type="submit" className="w-full bg-blue-600 text-white py-3.5 rounded-2xl text-sm font-black shadow-lg">確認新增顧客</button>
                 </form>
                 <div className="mt-6 border-t pt-4 space-y-2 max-h-48 overflow-y-auto no-scrollbar">
